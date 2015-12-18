@@ -56,6 +56,7 @@ func (n *node) perttyNode() {
 		n.perttyNode2()
 	}
 	fmt.Printf("%10s = %-v\n ", "handle", n.handle)
+	fmt.Printf("%10s = %-d\n ", "priority", n.priority)
 	fmt.Printf("\n\n")
 }
 
@@ -68,6 +69,7 @@ func (n *node) perttyNode2() {
 		fmt.Printf("%20s = %-s\n ", "indices", v.indices)
 		fmt.Printf("%20s = %-d\n ", "children", len(v.children))
 		fmt.Printf("%20s = %-v\n ", "handle", v.handle)
+		fmt.Printf("%20s = %-d\n ", "priority", n.priority)
 		fmt.Printf("\n")
 	}
 }
@@ -103,7 +105,7 @@ func (n *node) incrementChildPrio(pos int) int {
 func (n *node) addRoute(path string, handle Handle) {
 	var tempnode *node
 	fullPath := path
-	n.priority++
+	n.priority++ //默认为1起步
 
 	//统计参数个数
 	numParams := countParams(path)
@@ -120,19 +122,20 @@ func (n *node) addRoute(path string, handle Handle) {
 			}
 			fmt.Printf("更新当前的maxParams为：%d\n", n.maxParams)
 
-			// 查找最长的common prefix
+			// 计算公共前缀(Radix tree前缀数算法)
 			// 这也意味着，公共前缀不含'：'或'*'，因为现有的key不能包含那些字符。
-			// n.path=/cmd/vet
-			// path= /cmd/:tool/:sub
+			// n.path=/cmd/veta
+			// path= /cmd/vetb/:sub
 			i := 0
-			max := min(len(path), len(n.path))
+			max := min(len(path), len(n.path)) //这里max的值是/cmd/veta的长度9
 			for i < max && path[i] == n.path[i] {
-				i++
+				i++ //计算出前缀索引值 注释中的例子计算出的前缀是 /cmd/vet
 			}
 			fmt.Printf("i=%d | max=%d\n", i, max)
 
 			// 边界切分
-			if i < len(n.path) {
+			if i < len(n.path) { //如果条件成立，表示存在前缀，这里是//cmd/vet
+				// 创建子节点
 				child := node{
 					path:      n.path[i:],
 					wildChild: n.wildChild,
@@ -148,11 +151,11 @@ func (n *node) addRoute(path string, handle Handle) {
 						child.maxParams = child.children[i].maxParams
 					}
 				}
-
+				//在n.children下加入新切分的child
 				n.children = []*node{&child}
 				// []byte for proper unicode char conversion, see #65
 				n.indices = string([]byte{n.path[i]})
-				n.path = path[:i]
+				n.path = path[:i] //设置为新计算的前缀值/s
 				n.handle = nil
 				n.wildChild = false
 
@@ -163,7 +166,7 @@ func (n *node) addRoute(path string, handle Handle) {
 			// 弄个新节点，是这个节点的子节点
 			if i < len(path) {
 				path = path[i:]
-				fmt.Println("[Kuuyee]===.4")
+				fmt.Println("[Kuuyee]===.4 path=%s", path)
 				if n.wildChild {
 					n = n.children[0]
 					n.priority++
@@ -181,6 +184,9 @@ func (n *node) addRoute(path string, handle Handle) {
 							continue walk
 						}
 					}
+					fmt.Println("path segment '" + path +
+						"' conflicts with existing wildcard '" + n.path +
+						"' in path '" + fullPath + "'")
 					panic("path segment '" + path +
 						"' conflicts with existing wildcard '" + n.path +
 						"' in path '" + fullPath + "'")
@@ -232,6 +238,7 @@ func (n *node) addRoute(path string, handle Handle) {
 				return
 			} else if i == len(path) { // Make node a (in-path) leaf
 				if n.handle != nil {
+					fmt.Println("a handle is already registered for path '" + fullPath + "'")
 					panic("a handle is already registered for path '" + fullPath + "'")
 				}
 				n.handle = handle
@@ -268,6 +275,8 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 			switch path[end] {
 			// 通配符名字不能包含':'和'*'
 			case ':', '*':
+				fmt.Println("每段路径只能允许有一个通配符，：'" +
+					path[i:] + "' in path '" + fullPath + "'")
 				panic("每段路径只能允许有一个通配符，：'" +
 					path[i:] + "' in path '" + fullPath + "'")
 			default:
@@ -277,12 +286,15 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 		fmt.Println("[Kuuyee] insertChild===.2")
 		// 如果我们在这里插入通配符，那么node的子将不能被查找到
 		if len(n.children) > 0 {
+			fmt.Println("通配符路由 '" + path[i:end] +
+				"' 和存在的children冲突 '" + fullPath + "'")
 			panic("通配符路由 '" + path[i:end] +
 				"' 和存在的children冲突 '" + fullPath + "'")
 		}
 		fmt.Println("[Kuuyee] insertChild===.3")
 		// 检查如果通配符有名字
 		if end-i < 2 {
+			fmt.Println("wildcards must be named with a non-empty name in path '" + fullPath + "'")
 			panic("wildcards must be named with a non-empty name in path '" + fullPath + "'")
 		}
 
@@ -317,16 +329,19 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 			}
 		} else { // catchAll
 			if end != max || numParams > 1 {
+				fmt.Println("catch-all routes are only allowed at the end of the path in path '" + fullPath + "'")
 				panic("catch-all routes are only allowed at the end of the path in path '" + fullPath + "'")
 			}
 
 			if len(n.path) > 0 && n.path[len(n.path)-1] == '/' {
+				fmt.Println("catch-all conflicts with existing handle for the path segment root in path '" + fullPath + "'")
 				panic("catch-all conflicts with existing handle for the path segment root in path '" + fullPath + "'")
 			}
 
 			// currently fixed width 1 for '/'
 			i--
 			if path[i] != '/' {
+				fmt.Println("no / before catch-all in path '" + fullPath + "'")
 				panic("no / before catch-all in path '" + fullPath + "'")
 			}
 
