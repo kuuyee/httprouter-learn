@@ -105,7 +105,7 @@ func (n *node) incrementChildPrio(pos int) int {
 func (n *node) addRoute(path string, handle Handle) {
 	var tempnode *node
 	fullPath := path
-	n.priority++ //默认为1起步
+	n.priority++ //默认+1起步
 
 	//统计参数个数
 	numParams := countParams(path)
@@ -116,11 +116,13 @@ func (n *node) addRoute(path string, handle Handle) {
 		fmt.Printf("n.path: %s | n.children: %d | n.maxParams: %d\n", n.path, len(n.children), n.maxParams)
 	walk:
 		for {
+			fmt.Printf("[Kuuyee]===.新的循环开始 %s\n", path)
+			n.perttyNode()
 			// 更新当前node的maxParams
 			if numParams > n.maxParams {
 				n.maxParams = numParams
+				fmt.Printf("\n更新当前的maxParams为：%d\n", n.maxParams)
 			}
-			fmt.Printf("更新当前的maxParams为：%d\n", n.maxParams)
 
 			// 计算公共前缀(Radix tree前缀数算法)
 			// 这也意味着，公共前缀不含'：'或'*'，因为现有的key不能包含那些字符。
@@ -149,25 +151,27 @@ func (n *node) addRoute(path string, handle Handle) {
 				for i := range child.children {
 					if child.children[i].maxParams > child.maxParams {
 						child.maxParams = child.children[i].maxParams
+						fmt.Printf("更新child的maxParams为：%d\n", child.maxParams)
 					}
 				}
 				//在n.children下加入新切分的child
 				n.children = []*node{&child}
 				// []byte for proper unicode char conversion, see #65
-				n.indices = string([]byte{n.path[i]})
-				n.path = path[:i] //设置为新计算的前缀值/s
+				n.indices = string([]byte{n.path[i]}) //当前索引 这里是a
+				n.path = path[:i]                     //设置为新计算的前缀值/s
 				n.handle = nil
 				n.wildChild = false
 
 				child.perttyNode()
 				n.perttyNode()
 			}
-			fmt.Println("[Kuuyee]===.3")
+			fmt.Printf("[Kuuyee]===.3 %s\n", n.indices)
 			// 弄个新节点，是这个节点的子节点
 			if i < len(path) {
 				path = path[i:]
-				fmt.Println("[Kuuyee]===.4 path=%s", path)
-				if n.wildChild {
+				fmt.Printf("[Kuuyee]===.4 path=%s\n", path)
+				if n.wildChild { //表示一个完成节点，可以赋予handle
+					fmt.Printf("[Kuuyee]===.4.1 path=%t\n", n.wildChild)
 					n = n.children[0]
 					n.priority++
 
@@ -192,13 +196,14 @@ func (n *node) addRoute(path string, handle Handle) {
 						"' in path '" + fullPath + "'")
 				}
 
+				// 获取截取后path的第一个字符 ascii码 这里是98 (b)
 				c := path[0]
 				fmt.Printf("[Kuuyee]===.5 path=%s c=%d\n", path, c)
 
-				// slash after param
+				// slash after param 判断n是否为参数类型,并且是否为斜杠,并且只有一个子
 				if n.nType == param && c == '/' && len(n.children) == 1 {
-					n = n.children[0]
-					n.priority++
+					n = n.children[0] // 控制权切换到子
+					n.priority++      // 给子节点权重加1
 					fmt.Println("[Kuuyee]===.6")
 					continue walk
 				}
@@ -206,10 +211,11 @@ func (n *node) addRoute(path string, handle Handle) {
 
 				// Check if a child with the next path byte exists
 				for i := 0; i < len(n.indices); i++ {
+					fmt.Println("[Kuuyee]=====================================.8. n.indices[i]", n.indices[i])
 					if c == n.indices[i] {
+						fmt.Println("[Kuuyee]=====================================.8.1")
 						i = n.incrementChildPrio(i)
 						n = n.children[i]
-						fmt.Println("[Kuuyee]===.8")
 						continue walk
 					}
 				}
@@ -218,7 +224,7 @@ func (n *node) addRoute(path string, handle Handle) {
 				// 否则插入
 				if c != ':' && c != '*' {
 					// []byte for proper unicode char conversion, see #65
-					n.indices += string([]byte{c})
+					n.indices += string([]byte{c}) //变为ab
 					child := &node{
 						maxParams: numParams,
 					}
@@ -230,9 +236,11 @@ func (n *node) addRoute(path string, handle Handle) {
 					fmt.Println("[Kuuyee]===.10")
 				}
 				fmt.Println("[Kuuyee]===.11")
+				tempnode.perttyNode()
+				fmt.Printf("tree不为空 numParams: %d | path: %s | fullPath: %s | handle: %v\n", numParams, path, fullPath, handle)
 				n.insertChild(numParams, path, fullPath, handle)
 				n.perttyNode()
-				fmt.Println("[Kuuyee]===.1")
+				fmt.Println("[Kuuyee]===.12")
 
 				tempnode.perttyNode()
 				return
@@ -268,7 +276,7 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 		if c != ':' && c != '*' {
 			continue
 		}
-		fmt.Println("[Kuuyee] insertChild===.1")
+		fmt.Println("[Kuuyee] insertChild===.1 i=", i)
 		// 找到通配符结尾(例如'/'或路径尾部)
 		end := i + 1
 		for end < max && path[end] != '/' {
@@ -283,7 +291,7 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 				end++
 			}
 		}
-		fmt.Println("[Kuuyee] insertChild===.2")
+		fmt.Println("[Kuuyee] insertChild===.2 end = ", end)
 		// 如果我们在这里插入通配符，那么node的子将不能被查找到
 		if len(n.children) > 0 {
 			fmt.Println("通配符路由 '" + path[i:end] +
@@ -310,7 +318,7 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 				maxParams: numParams,
 			}
 			n.children = []*node{child}
-			n.wildChild = true
+			n.wildChild = true // 这是个能够分配handle的节点
 			n = child
 			n.priority++
 			numParams--
@@ -325,8 +333,11 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 					priority:  1,
 				}
 				n.children = []*node{child}
+				fmt.Println("[Kuuyee] insertChild===.3.1")
+				n.perttyNode()
 				n = child
 			}
+
 		} else { // catchAll
 			if end != max || numParams > 1 {
 				fmt.Println("catch-all routes are only allowed at the end of the path in path '" + fullPath + "'")
@@ -355,6 +366,8 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 			}
 			n.children = []*node{child}
 			n.indices = string(path[i])
+			fmt.Println("[Kuuyee] insertChild===.3.2")
+			n.perttyNode()
 			n = child
 			n.priority++
 
@@ -374,4 +387,6 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 	//
 	n.path = path[offset:]
 	n.handle = handle
+	fmt.Println("[Kuuyee] insertChild===.3.2")
+	n.perttyNode()
 }

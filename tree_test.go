@@ -17,7 +17,7 @@ func testRoutes(t *testing.T, routes []testRoute) {
 	tree := &node{}
 
 	for _, route := range routes {
-		fmt.Println(route.path)
+		//fmt.Println(route.path)
 		recv := catchPanic(func() {
 			tree.addRoute(route.path, h)
 		})
@@ -44,17 +44,20 @@ func catchPanic(testFunc func()) (recv interface{}) {
 
 func TestTreeChildConflict(t *testing.T) {
 	routes := []testRoute{
-		//{"/search/", false},
-		//{"/support/", false},
+		//{"/aaa/", false},
+		//{"/abb/", false},
+		//{"/abc/", false},
+		{"/search/", false},
+		{"/support/", false},
 		//{"/blog/:post/", false},
 		//{"/about-us/team/", false},
 		//{"contact", false},
-		{"/cmd/veta", false},
-		{"cmd/vetb/:sub", false},
+		//{"/cmd/veta", false},
+		//{"/cmd/vetb/:sub/", false},
 		//{"/cmd/:tool/:sub", true},
 		//{"/admin/:category/:page", false},
 		//{"/src/AUTHORS", false},
-		//{"/src/*filepath", true},
+		//{"/src/*filepath", false},
 		//{"/user_x", false},
 		//{"/user_:name", true},
 		//{"/id/:id", false},
